@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy 
+import bcrypt
 
 app = Flask(__name__)
 
@@ -19,10 +20,15 @@ class User(db.Model):
 with app.app_context():
   db.create_all()
 
+def hash_password(pwd : str)-> bytes:
+  salt = bcrypt.gensalt()
+  return bcrypt.hashpw(pwd.encode('utf-8'), salt)
+
 @app.route('/user', methods=['POST'])
 def create_user():
   data = request.json 
-  new_user = User(username=data['username'], password=data['password'], active = True)
+
+  new_user = User(username=data['username'], password=hash_password(data['password']), active = True)
   db.session.add(new_user)
   db.session.commit()
 
@@ -31,14 +37,22 @@ def create_user():
 @app.route('/user/<int:id>', methods=['GET'])
 def get_user(id):
   user = User.query.get_or_404(id)
-  return jsonify({'id': user.id, 'username': user.username, 'active': user.active}), 200
+  return jsonify({
+    'id': user.id, 
+    'username': user.username, 
+    'password': str(user.password), 
+    'active': user.active
+  }), 200
 
 @app.route('/users', methods=['GET'])
 def get_users():
   users = User.query.all()
   return jsonify(
     [{
-      'id': user.id, 'username': user.username, 'active': user.active
+      'id': user.id, 
+      'username': user.username, 
+      'password': str(user.password), 
+      'active': user.active
     } for user in users]
   ), 200
 
@@ -47,7 +61,7 @@ def update_user(id):
   user = User.query.get_or_404(id)
   data = request.json
   user.username = data['username']
-  user.password = data['password']
+  user.password = hash_password(data['password'])
   db.session.commit()
   return jsonify({'message': 'User was updated successfully'}), 200
 
